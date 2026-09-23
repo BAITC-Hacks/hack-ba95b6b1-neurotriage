@@ -23,3 +23,4 @@ def load_model(path):
 def predict(model, forecast_df):
     forecast_df = build_features(forecast_df)
     return model.predict(forecast_df[FEATURE_COLS])
+    return preds.clip(0, 1)
