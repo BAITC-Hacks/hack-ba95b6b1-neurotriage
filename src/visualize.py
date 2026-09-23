@@ -11,10 +11,17 @@ def check_output(path="data/forecast_output.csv"):
     return df
 
 def plot_forecast(df, out_path="forecast_plot.png"):
+    df = df.copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["forecast_made_on"] = pd.to_datetime(df["forecast_made_on"])
+    df = df.sort_values(["turbine_id", "forecast_made_on", "timestamp"])
+    df = df.drop_duplicates(subset=["turbine_id", "timestamp"], keep="last")
+    df = df.sort_values(["turbine_id", "timestamp"])
+
     fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
     for ax, tid in zip(axes, df["turbine_id"].unique()):
         sub = df[df["turbine_id"] == tid]
-        ax.plot(pd.to_datetime(sub["timestamp"]), sub["power_pred"], linewidth=0.8)
+        ax.plot(sub["timestamp"], sub["power_pred"], linewidth=0.8)
         ax.set_title(f"Прогноз мощности — {tid}")
         ax.set_ylabel("power_pred")
         ax.grid(alpha=0.3)
@@ -26,4 +33,3 @@ def plot_forecast(df, out_path="forecast_plot.png"):
 if __name__ == "__main__":
     df = check_output()
     plot_forecast(df)
-    
