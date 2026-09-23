@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NeuroTriage — Прогноз выработки ВЭС</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a141f;
+    --bg-alt: #0f1c29;
+    --panel: #122232;
+    --panel-line: #1e3346;
+    --text: #e7eef4;
+    --text-dim: #8ba0b3;
+    --cyan: #35d0c0;
+    --amber: #f2a541;
+    --t1: #35d0c0;
+    --t2: #f2a541;
+    --radius: 3px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(53,208,192,.08), transparent),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(242,165,65,.06), transparent),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    min-height: 100vh;
+  }
+  h1, h2, .display { font-family: 'Space Grotesk', sans-serif; }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ---- Hero ---- */
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    padding: 36px 8px 44px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .hero-text { flex: 1; min-width: 0; }
+  .hero-kicker {
+    color: var(--cyan);
+    font-size: 13px;
+    letter-spacing: .04em;
+    margin: 0 0 10px;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 5vw, 42px);
+    line-height: 1.12;
+    font-weight: 600;
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .hero p {
+    color: var(--text-dim);
+    font-size: 15.5px;
+    line-height: 1.6;
+    max-width: 46ch;
+    margin: 0;
+  }
+
+  .turbine-box { flex-shrink: 0; width: 150px; height: 190px; }
+  @media (max-width: 620px) { .turbine-box { width: 100px; height: 130px; } .hero { flex-direction: column; align-items: flex-start; } }
+
+  .blades { transform-origin: 100px 62px; animation: spin 6s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .blades { animation: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- Status row ---- */
+  .status-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 32px 0 8px;
+  }
+  .status-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .status-label { font-size: 12px; color: var(--text-dim); margin: 0 0 6px; }
+  .status-value { font-size: 20px; font-weight: 600; font-family: 'Space Grotesk', sans-serif; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; position: relative; top: -1px; }
+  .dot.ok { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  .dot.bad { background: #e05c5c; box-shadow: 0 0 8px #e05c5c; }
+  .dot.pending { background: var(--text-dim); }
+
+  /* ---- Section ---- */
+  section { margin-top: 48px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 8px; }
+  .section-head h2 { font-size: 19px; font-weight: 600; margin: 0; }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--text-dim); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .chart-holder { position: relative; height: 320px; min-width: 0; }
+
+  .msg { color: var(--text-dim); font-size: 14px; padding: 20px 2px; }
+  .msg code {
+    background: var(--bg-alt);
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--amber);
+    font-size: 13px;
+  }
+  .retry-btn {
+    margin-top: 14px;
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .retry-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--panel-line); color: var(--text-dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-text">
+      <p class="hero-kicker">NeuroTriage · Хакатон HackAlem AI · Энергетика</p>
+      <h1>Агент прогноза выработки ВЭС</h1>
+      <p>Автономный агент прогнозирует почасовую мощность двух турбин на 24–48 часов вперёд, самостоятельно получая архивные прогнозы погоды по координатам турбин.</p>
+    </div>
+    <div class="turbine-box">
+      <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
+        <line x1="100" y1="62" x2="100" y2="210" stroke="#2a4257" stroke-width="6" stroke-linecap="round"/>
+        <g class="blades">
+          <ellipse cx="100" cy="30" rx="9" ry="32" fill="var(--cyan)" opacity="0.85" transform="rotate(0 100 62)"/>
+          <ellipse cx="100" cy="30" rx="9" ry="32" fill="var(--cyan)" opacity="0.85" transform="rotate(120 100 62)"/>
+          <ellipse cx="100" cy="30" rx="9" ry="32" fill="var(--cyan)" opacity="0.85" transform="rotate(240 100 62)"/>
+          <circle cx="100" cy="62" r="8" fill="#2a4257"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="status-row" id="statusRow">
+    <div class="status-card"><p class="status-label">API</p><p class="status-value"><span class="dot pending"></span>проверка…</p></div>
+    <div class="status-card"><p class="status-label">Турбины</p><p class="status-value">—</p></div>
+    <div class="status-card"><p class="status-label">Горизонт</p><p class="status-value">24–48 ч</p></div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>Прогноз мощности</h2>
+      <div class="legend">
+        <span><i style="background:var(--t1)"></i>Турбина 1</span>
+        <span><i style="background:var(--t2)"></i>Турбина 2</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="chart-holder"><canvas id="forecastChart"></canvas></div>
+      <div class="msg" id="forecastMsg" style="display:none"></div>
+    </div>
+  </section>
+
+  <footer>
+    NeuroTriage Wind Power Forecast Agent — дашборд обращается к локальному API на <code>http://127.0.0.1:8000</code>. Запустите сервер (<code>uvicorn src.api:app --reload --port 8000</code>) перед открытием этой страницы.
+  </footer>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+const COLORS = { t1: "#35d0c0", t2: "#f2a541" };
+
+async function checkHealth() {
+  const el = document.querySelector("#statusRow .status-card:nth-child(1) .status-value");
+  try {
+    const res = await fetch(`${API}/health`);
+    if (!res.ok) throw new Error();
+    el.innerHTML = `<span class="dot ok"></span>работает`;
+  } catch {
+    el.innerHTML = `<span class="dot bad"></span>недоступен`;
+  }
+}
+
+async function loadTurbines() {
+  const el = document.querySelector("#statusRow .status-card:nth-child(2) .status-value");
+  try {
+    const res = await fetch(`${API}/turbines`);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const list = data.turbines || data;
+    el.textContent = Array.isArray(list) ? list.join(", ") : JSON.stringify(list);
+  } catch {
+    el.textContent = "нет данных";
+  }
+}
+
+async function loadForecast() {
+  const holder = document.getElementById("forecastChart").parentElement;
+  const msg = document.getElementById("forecastMsg");
+  try {
+    const res = await fetch(`${API}/forecast`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+
+    const rows = Array.isArray(data) ? data : (data.forecast || data.data || []);
+    if (!rows.length) throw new Error("empty");
+
+    const byTurbine = {};
+    rows.forEach(r => {
+      const tid = r.turbine_id ?? r.turbine ?? "T1";
+      if (!byTurbine[tid]) byTurbine[tid] = [];
+      byTurbine[tid].push(r);
+    });
+
+    const labels = (byTurbine[Object.keys(byTurbine)[0]] || []).map(r =>
+      new Date(r.timestamp ?? r.time ?? r.datetime).toLocaleString("ru-RU", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })
+    );
+
+    const palette = [COLORS.t1, COLORS.t2];
+    const datasets = Object.keys(byTurbine).map((tid, i) => ({
+      label: tid,
+      data: byTurbine[tid].map(r => r.power_pred ?? r.power ?? r.value),
+      borderColor: palette[i % 2],
+      backgroundColor: palette[i % 2] + "22",
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: true
+    }));
+
+    new Chart(document.getElementById("forecastChart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#8ba0b3", maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: "#1e3346" } },
+          y: { ticks: { color: "#8ba0b3" }, grid: { color: "#1e3346" }, title: { display: true, text: "Норм. мощность", color: "#8ba0b3" } }
+        }
+      }
+    });
+  } catch (e) {
+    holder.style.display = "none";
+    msg.style.display = "block";
+    msg.innerHTML = `Не удалось получить прогноз с <code>${API}/forecast</code>.<br>Убедитесь, что сервер запущен и прогноз построен (<code>python src/agent.py</code> или соответствующий скрипт).<br><small>${e.message}</small>`;
+    const retry = document.createElement("button");
+    retry.className = "retry-btn";
+    retry.textContent = "Повторить попытку";
+    retry.onclick = () => location.reload();
+    msg.appendChild(document.createElement("br"));
+    msg.appendChild(retry);
+  }
+}
+
+checkHealth();
+loadTurbines();
+loadForecast();
+</script>
+</body>
+</html>
