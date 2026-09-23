@@ -2,8 +2,8 @@ import requests
 from datetime import datetime, timedelta
 
 TURBINES = {
-    "T1": {"lat": LAT1, "lon": LON1},
-    "T2": {"lat": LAT2, "lon": LON2},
+    "T1": {"lat": 43.645150, "lon": 78.535604},
+    "T2": {"lat": 43.643198, "lon": 78.538828},
 }
 
 def get_forecast(lat, lon, start_date, hours=48):
